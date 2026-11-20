@@ -612,7 +612,7 @@ input:focus, select:focus {
 .header-top {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  justify-content: center;
   gap: 8px;
   margin-bottom: 8px;
 }
@@ -621,7 +621,7 @@ input:focus, select:focus {
   display: flex;
   align-items: center;
   gap: 12px;
-  flex: 1;
+  flex: 0 1 auto;
   justify-content: center;
   min-width: 0;
 }
@@ -658,6 +658,7 @@ input:focus, select:focus {
   cursor: pointer;
   border: 1px solid var(--border);
   flex-shrink: 0;
+  margin: 10px auto 0;
 }
 
 .menu-btn span {
@@ -801,9 +802,6 @@ input:focus, select:focus {
     margin-top: 4px;
   }
 
-  .header-center {
-    justify-content: flex-start;
-  }
 }
 
 @media (min-width: 701px) {
