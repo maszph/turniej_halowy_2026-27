@@ -58,9 +58,10 @@
     // ===== LOGIN =====
     function tryLogin() {
       const pass = document.getElementById("loginPass").value;
-      if (pass === ADMIN_PASSWORD_CLIENT) {
+      if (ADMIN_PASSWORDS_CLIENT.includes(pass)) {
         currentPassword = pass;
         sessionStorage.setItem("admin_ok", "1");
+        sessionStorage.setItem("admin_pass", pass);
         loginScreen.style.display = "none";
         adminPanel.style.display = "block";
         loadAdmin();
@@ -78,11 +79,12 @@
 
     document.getElementById("logoutBtn").addEventListener("click", () => {
       sessionStorage.removeItem("admin_ok");
+      sessionStorage.removeItem("admin_pass");
       location.reload();
     });
 
     if (sessionStorage.getItem("admin_ok") === "1") {
-      currentPassword = ADMIN_PASSWORD_CLIENT;
+      currentPassword = sessionStorage.getItem("admin_pass") || ADMIN_PASSWORDS_CLIENT[0];
       loginScreen.style.display = "none";
       adminPanel.style.display = "block";
     }
