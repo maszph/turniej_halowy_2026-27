@@ -1,0 +1,227 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <meta name="theme-color" content="#0b0b0b">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <title>Turniej Halowy – DKS Czarni Kołowa Góra</title>
+  <link rel="stylesheet" href="style.css">
+  <link rel="icon" href="herb.png">
+</head>
+<body>
+  <div class="app">
+    <header class="header">
+      <img src="herb.png" alt="DKS Czarni" class="header-logo">
+      <h1>Turniej Halowy</h1>
+      <p class="subtitle">DKS Czarni Kołowa Góra</p>
+      <span class="badge">Zima 2026/27</span>
+    </header>
+
+    <nav class="tabs">
+      <button class="tab-btn active" data-tab="tabela">Tabela</button>
+      <button class="tab-btn" data-tab="mecze">Mecze</button>
+      <button class="tab-btn" data-tab="strzelcy">Strzelcy</button>
+      <button class="tab-btn" data-tab="sklady">Składy</button>
+      <button class="tab-btn" data-tab="info">Info</button>
+    </nav>
+
+    <main id="content">
+      <div class="loading">
+        <div class="spinner"></div>
+        <p>Ładowanie danych…</p>
+      </div>
+    </main>
+
+    <footer class="footer">
+      DKS Czarni Kołowa Góra · Turniej Halowy
+    </footer>
+  </div>
+
+  <script src="config.js"></script>
+  <script src="app.js"></script>
+  <script>
+    // ========== RENDER ==========
+    function renderTabela() {
+      const table = calcTable();
+      if (!table.length) {
+        return `<div class="card"><div class="empty"><div class="empty-icon">📊</div>Brak rozegranych meczów</div></div>`;
+      }
+
+      let html = `
+        <div class="card">
+          <div class="card-title">Tabela</div>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>#</th>
+                  <th>Drużyna</th>
+                  <th>M</th>
+                  <th>W</th>
+                  <th>R</th>
+                  <th>P</th>
+                  <th>+/−</th>
+                  <th>Pkt</th>
+                </tr>
+              </thead>
+              <tbody>`;
+
+      table.forEach((t, i) => {
+        const diff = t.bz - t.bs;
+        const diffClass = diff > 0 ? "positive" : (diff < 0 ? "negative" : "");
+        const diffStr = diff > 0 ? `+${diff}` : diff;
+        html += `
+          <tr>
+            <td class="pos">${i + 1}</td>
+            <td class="team-name">${t.nazwa}</td>
+            <td>${t.m}</td>
+            <td>${t.w}</td>
+            <td>${t.r}</td>
+            <td>${t.p}</td>
+            <td class="${diffClass}">${diffStr}</td>
+            <td class="pts">${t.pkt}</td>
+          </tr>`;
+      });
+
+      html += `</tbody></table></div></div>`;
+      return html;
+    }
+
+    function renderMecze() {
+      const mecze = [...DATA.mecze].sort((a, b) => {
+        // najnowsze na górze
+        return (b.utworzono || b.data || "").localeCompare(a.utworzono || a.data || "");
+      });
+
+      if (!mecze.length) {
+        return `<div class="card"><div class="empty"><div class="empty-icon">⚽</div>Brak meczów</div></div>`;
+      }
+
+      let html = `<div class="card"><div class="card-title">Rozegrane mecze (${mecze.length})</div>`;
+
+      mecze.forEach(m => {
+        html += `
+          <div class="match-item">
+            <div class="match-teams">
+              <div class="home">${getTeamName(m.druzyna_a)}</div>
+              <div class="away">${getTeamName(m.druzyna_b)}</div>
+              <div class="match-date">${formatDate(m.data)}</div>
+            </div>
+            <div class="match-score">${m.gole_a} : ${m.gole_b}</div>
+          </div>`;
+      });
+
+      html += `</div>`;
+      return html;
+    }
+
+    function renderStrzelcy() {
+      const scorers = calcTopScorers();
+      if (!scorers.length) {
+        return `<div class="card"><div class="empty"><div class="empty-icon">🎯</div>Brak strzelonych bramek</div></div>`;
+      }
+
+      let html = `<div class="card"><div class="card-title">Najlepsi strzelcy</div>`;
+      scorers.forEach((s, i) => {
+        html += `
+          <div class="scorer-row">
+            <div>
+              <div class="scorer-name">${i + 1}. ${s.imie}</div>
+              <div class="scorer-team">${s.team}</div>
+            </div>
+            <div class="scorer-goals">${s.bramki}</div>
+          </div>`;
+      });
+      html += `</div>`;
+      return html;
+    }
+
+    function renderSklady() {
+      let html = "";
+      DATA.druzyny.filter(d => d.aktywna !== false).forEach(team => {
+        const players = getPlayersByTeam(team.id);
+        html += `
+          <div class="card team-card">
+            <div class="team-header">
+              <h3>${team.nazwa}</h3>
+              <span style="color:var(--text-muted);font-size:0.85rem">${players.length} zawodników</span>
+            </div>
+            <ul class="player-list">`;
+        players.forEach(p => {
+          html += `
+            <li class="player-item">
+              <span>${p.imie}</span>
+              <span class="player-goals"><strong>${p.bramki}</strong> goli</span>
+            </li>`;
+        });
+        html += `</ul></div>`;
+      });
+      return html || `<div class="card"><div class="empty">Brak drużyn</div></div>`;
+    }
+
+    function renderInfo() {
+      return `
+        <div class="card">
+          <div class="card-title">Regulamin turnieju</div>
+          
+          <div class="info-block">
+            <h3>Format meczu</h3>
+            <ul>
+              <li>Mecz trwa <strong>5 minut</strong></li>
+              <li>Na boisku: <strong>4 zawodników</strong> (bramkarz + 3 w polu)</li>
+              <li>Wygrana drużyna zostaje na boisku na kolejne 5 minut</li>
+              <li>Przy remisie obie drużyny schodzą</li>
+            </ul>
+          </div>
+
+          <div class="info-block">
+            <h3>Punktacja</h3>
+            <ul>
+              <li>Wygrana → <strong>3 punkty</strong></li>
+              <li>Remis → <strong>1 punkt</strong></li>
+              <li>Przegrana → 0 punktów</li>
+            </ul>
+          </div>
+
+          <div class="info-block">
+            <h3>Tabela</h3>
+            <p>O kolejności decydują kolejno: punkty → bilans bramek → bramki zdobyte → nazwa drużyny.</p>
+          </div>
+
+          <div class="info-block">
+            <h3>Drużyny</h3>
+            <p>Turniej rozgrywany w systemie „każdy z każdym”. Wyniki aktualizowane na bieżąco po każdym meczu.</p>
+          </div>
+        </div>
+      `;
+    }
+
+    // ========== TABS ==========
+    const content = document.getElementById("content");
+    const tabs = document.querySelectorAll(".tab-btn");
+
+    function showTab(name) {
+      tabs.forEach(t => t.classList.toggle("active", t.dataset.tab === name));
+      let html = "";
+      if (name === "tabela") html = renderTabela();
+      else if (name === "mecze") html = renderMecze();
+      else if (name === "strzelcy") html = renderStrzelcy();
+      else if (name === "sklady") html = renderSklady();
+      else if (name === "info") html = renderInfo();
+      content.innerHTML = html;
+    }
+
+    tabs.forEach(btn => {
+      btn.addEventListener("click", () => showTab(btn.dataset.tab));
+    });
+
+    // ========== INIT ==========
+    (async () => {
+      await fetchData();
+      showTab("tabela");
+    })();
+  </script>
+</body>
+</html>

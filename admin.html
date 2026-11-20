@@ -1,0 +1,356 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <meta name="theme-color" content="#0b0b0b">
+  <title>Admin – Turniej Halowy</title>
+  <link rel="stylesheet" href="style.css">
+  <link rel="icon" href="herb.png">
+</head>
+<body>
+  <div class="app">
+    <!-- LOGIN -->
+    <div id="loginScreen" class="login-box">
+      <img src="herb.png" alt="Logo" class="header-logo">
+      <h1 style="color:var(--accent);margin:12px 0 6px;font-size:1.5rem;">Panel Admina</h1>
+      <p style="color:var(--text-muted);margin-bottom:28px;">Turniej Halowy · DKS Czarni</p>
+
+      <div class="form-group" style="text-align:left;">
+        <label>Hasło</label>
+        <input type="password" id="loginPass" placeholder="Wpisz hasło" autocomplete="current-password">
+      </div>
+      <button class="btn btn-primary" id="loginBtn">Zaloguj</button>
+      <p id="loginError" style="color:var(--accent);margin-top:14px;font-size:0.9rem;display:none;"></p>
+    </div>
+
+    <!-- ADMIN PANEL -->
+    <div id="adminPanel" style="display:none;">
+      <header class="header">
+        <img src="herb.png" alt="Logo" class="header-logo" style="width:60px;height:60px;">
+        <h1>Panel Admina</h1>
+        <p class="subtitle">Dodawanie wyników i drużyn</p>
+      </header>
+
+      <nav class="tabs">
+        <button class="tab-btn active" data-tab="addmatch">Dodaj mecz</button>
+        <button class="tab-btn" data-tab="addteam">Nowa drużyna</button>
+        <button class="tab-btn" data-tab="list">Lista meczów</button>
+      </nav>
+
+      <main id="adminContent"></main>
+
+      <div style="margin-top:30px;text-align:center;">
+        <button class="btn btn-secondary btn-sm" id="logoutBtn">Wyloguj</button>
+        <a href="index.html" class="btn btn-secondary btn-sm" style="margin-left:10px;text-decoration:none;">→ Strona publiczna</a>
+      </div>
+    </div>
+  </div>
+
+  <script src="config.js"></script>
+  <script src="app.js"></script>
+  <script>
+    const loginScreen = document.getElementById("loginScreen");
+    const adminPanel = document.getElementById("adminPanel");
+    const adminContent = document.getElementById("adminContent");
+    let currentPassword = "";
+
+    // ===== LOGIN =====
+    function tryLogin() {
+      const pass = document.getElementById("loginPass").value;
+      if (pass === ADMIN_PASSWORD_CLIENT) {
+        currentPassword = pass;
+        sessionStorage.setItem("admin_ok", "1");
+        loginScreen.style.display = "none";
+        adminPanel.style.display = "block";
+        loadAdmin();
+      } else {
+        const err = document.getElementById("loginError");
+        err.textContent = "Błędne hasło";
+        err.style.display = "block";
+      }
+    }
+
+    document.getElementById("loginBtn").addEventListener("click", tryLogin);
+    document.getElementById("loginPass").addEventListener("keydown", e => {
+      if (e.key === "Enter") tryLogin();
+    });
+
+    document.getElementById("logoutBtn").addEventListener("click", () => {
+      sessionStorage.removeItem("admin_ok");
+      location.reload();
+    });
+
+    if (sessionStorage.getItem("admin_ok") === "1") {
+      currentPassword = ADMIN_PASSWORD_CLIENT;
+      loginScreen.style.display = "none";
+      adminPanel.style.display = "block";
+    }
+
+    // ===== TABS =====
+    const adminTabs = document.querySelectorAll("#adminPanel .tab-btn");
+    adminTabs.forEach(btn => {
+      btn.addEventListener("click", () => {
+        adminTabs.forEach(t => t.classList.remove("active"));
+        btn.classList.add("active");
+        renderAdminTab(btn.dataset.tab);
+      });
+    });
+
+    async function loadAdmin() {
+      await fetchData();
+      renderAdminTab("addmatch");
+    }
+
+    function renderAdminTab(name) {
+      if (name === "addmatch") adminContent.innerHTML = renderAddMatch();
+      else if (name === "addteam") adminContent.innerHTML = renderAddTeam();
+      else if (name === "list") adminContent.innerHTML = renderMatchList();
+      bindAdminEvents(name);
+    }
+
+    // ===== DODAJ MECZ =====
+    function renderAddMatch() {
+      const teams = DATA.druzyny.filter(d => d.aktywna !== false);
+      let options = teams.map(t => `<option value="${t.id}">${t.nazwa}</option>`).join("");
+
+      return `
+        <div class="card">
+          <div class="card-title">Nowy mecz</div>
+
+          <div class="form-group">
+            <label>Drużyna A</label>
+            <select id="teamA">${options}</select>
+          </div>
+
+          <div class="form-group">
+            <label>Drużyna B</label>
+            <select id="teamB">${options}</select>
+          </div>
+
+          <div style="display:flex;gap:12px;">
+            <div class="form-group" style="flex:1;">
+              <label>Gole A</label>
+              <input type="number" id="goalsA" min="0" value="0">
+            </div>
+            <div class="form-group" style="flex:1;">
+              <label>Gole B</label>
+              <input type="number" id="goalsB" min="0" value="0">
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label>Data</label>
+            <input type="date" id="matchDate" value="${new Date().toISOString().slice(0,10)}">
+          </div>
+
+          <div class="form-group">
+            <label>Strzelcy (zaznacz i podaj liczbę goli)</label>
+            <div id="scorerList" class="scorer-select-list"></div>
+          </div>
+
+          <button class="btn btn-primary" id="saveMatchBtn">Zapisz wynik</button>
+        </div>
+      `;
+    }
+
+    function updateScorerList() {
+      const teamA = Number(document.getElementById("teamA").value);
+      const teamB = Number(document.getElementById("teamB").value);
+      const list = document.getElementById("scorerList");
+      if (!list) return;
+
+      const players = DATA.zawodnicy.filter(z => z.id_druzyny === teamA || z.id_druzyny === teamB);
+      if (!players.length) {
+        list.innerHTML = `<p style="color:var(--text-muted);">Brak zawodników</p>`;
+        return;
+      }
+
+      list.innerHTML = players.map(p => `
+        <div class="scorer-select-item">
+          <label>
+            <input type="checkbox" class="scorer-check" data-id="${p.id}" style="margin-right:8px;">
+            ${p.imie} <span style="color:var(--text-muted);font-size:0.8rem;">(${getTeamName(p.id_druzyny)})</span>
+          </label>
+          <input type="number" class="scorer-goals-input" data-id="${p.id}" min="1" value="1" disabled>
+        </div>
+      `).join("");
+
+      list.querySelectorAll(".scorer-check").forEach(chk => {
+        chk.addEventListener("change", () => {
+          const inp = list.querySelector(`.scorer-goals-input[data-id="${chk.dataset.id}"]`);
+          inp.disabled = !chk.checked;
+          if (!chk.checked) inp.value = 1;
+        });
+      });
+    }
+
+    // ===== NOWA DRUŻYNA =====
+    function renderAddTeam() {
+      return `
+        <div class="card">
+          <div class="card-title">Nowa drużyna</div>
+
+          <div class="form-group">
+            <label>Nazwa drużyny</label>
+            <input type="text" id="newTeamName" placeholder="np. FC Test">
+          </div>
+
+          <div class="form-group">
+            <label>Zawodnicy (minimum 4) – jeden w linii</label>
+            <textarea id="newPlayers" rows="6" placeholder="Imię Nazwisko&#10;Imię Nazwisko&#10;Imię Nazwisko&#10;Imię Nazwisko" style="width:100%;padding:13px 14px;background:#111;border:1px solid var(--border);border-radius:10px;color:var(--text);font-size:1rem;font-family:inherit;resize:vertical;"></textarea>
+          </div>
+
+          <button class="btn btn-primary" id="saveTeamBtn">Dodaj drużynę</button>
+        </div>
+      `;
+    }
+
+    // ===== LISTA MECZÓW =====
+    function renderMatchList() {
+      const mecze = [...DATA.mecze].sort((a, b) => (b.utworzono || "").localeCompare(a.utworzono || ""));
+      if (!mecze.length) {
+        return `<div class="card"><div class="empty">Brak meczów</div></div>`;
+      }
+
+      let html = `<div class="card"><div class="card-title">Wszystkie mecze</div>`;
+      mecze.forEach(m => {
+        html += `
+          <div class="match-item">
+            <div class="match-teams">
+              <div class="home">${getTeamName(m.druzyna_a)}</div>
+              <div class="away">${getTeamName(m.druzyna_b)}</div>
+              <div class="match-date">${formatDate(m.data)}</div>
+            </div>
+            <div style="display:flex;align-items:center;gap:12px;">
+              <div class="match-score">${m.gole_a} : ${m.gole_b}</div>
+              <button class="btn btn-danger btn-sm delete-match" data-id="${m.id}">Usuń</button>
+            </div>
+          </div>`;
+      });
+      html += `</div>`;
+      return html;
+    }
+
+    // ===== EVENTY =====
+    function bindAdminEvents(tab) {
+      if (tab === "addmatch") {
+        updateScorerList();
+        document.getElementById("teamA").addEventListener("change", updateScorerList);
+        document.getElementById("teamB").addEventListener("change", updateScorerList);
+
+        document.getElementById("saveMatchBtn").addEventListener("click", async () => {
+          const teamA = Number(document.getElementById("teamA").value);
+          const teamB = Number(document.getElementById("teamB").value);
+          const goalsA = Number(document.getElementById("goalsA").value);
+          const goalsB = Number(document.getElementById("goalsB").value);
+          const date = document.getElementById("matchDate").value;
+
+          if (teamA === teamB) {
+            showToast("Wybierz dwie różne drużyny", "error");
+            return;
+          }
+
+          const strzelcy = [];
+          document.querySelectorAll(".scorer-check:checked").forEach(chk => {
+            const id = Number(chk.dataset.id);
+            const goals = Number(document.querySelector(`.scorer-goals-input[data-id="${id}"]`).value) || 1;
+            strzelcy.push({ id_zawodnika: id, liczba: goals });
+          });
+
+          const btn = document.getElementById("saveMatchBtn");
+          btn.disabled = true;
+          btn.textContent = "Zapisywanie…";
+
+          const res = await apiPost({
+            action: "addMatch",
+            password: currentPassword,
+            druzyna_a: teamA,
+            druzyna_b: teamB,
+            gole_a: goalsA,
+            gole_b: goalsB,
+            data: date,
+            strzelcy
+          });
+
+          btn.disabled = false;
+          btn.textContent = "Zapisz wynik";
+
+          if (res.ok) {
+            showToast("Mecz zapisany!");
+            await fetchData();
+            renderAdminTab("addmatch");
+          } else {
+            showToast(res.error || "Błąd zapisu", "error");
+          }
+        });
+      }
+
+      if (tab === "addteam") {
+        document.getElementById("saveTeamBtn").addEventListener("click", async () => {
+          const nazwa = document.getElementById("newTeamName").value.trim();
+          const raw = document.getElementById("newPlayers").value;
+          const gracze = raw.split("\n").map(s => s.trim()).filter(Boolean);
+
+          if (!nazwa) {
+            showToast("Podaj nazwę drużyny", "error");
+            return;
+          }
+          if (gracze.length < 4) {
+            showToast("Minimum 4 zawodników", "error");
+            return;
+          }
+
+          const btn = document.getElementById("saveTeamBtn");
+          btn.disabled = true;
+          btn.textContent = "Dodawanie…";
+
+          const res = await apiPost({
+            action: "addTeam",
+            password: currentPassword,
+            nazwa,
+            gracze
+          });
+
+          btn.disabled = false;
+          btn.textContent = "Dodaj drużynę";
+
+          if (res.ok) {
+            showToast("Drużyna dodana!");
+            await fetchData();
+            renderAdminTab("addteam");
+          } else {
+            showToast(res.error || "Błąd", "error");
+          }
+        });
+      }
+
+      if (tab === "list") {
+        document.querySelectorAll(".delete-match").forEach(btn => {
+          btn.addEventListener("click", async () => {
+            if (!confirm("Na pewno usunąć ten mecz?")) return;
+            const id = Number(btn.dataset.id);
+            const res = await apiPost({
+              action: "deleteMatch",
+              password: currentPassword,
+              id
+            });
+            if (res.ok) {
+              showToast("Mecz usunięty");
+              await fetchData();
+              renderAdminTab("list");
+            } else {
+              showToast(res.error || "Błąd", "error");
+            }
+          });
+        });
+      }
+    }
+
+    // Auto-start if already logged
+    if (sessionStorage.getItem("admin_ok") === "1") {
+      loadAdmin();
+    }
+  </script>
+</body>
+</html>
